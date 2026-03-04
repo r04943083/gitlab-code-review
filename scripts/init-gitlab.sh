@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Prevent editor from popping up
+export EDITOR=cat
+export VISUAL=cat
+export GIT_EDITOR=cat
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
@@ -103,11 +108,11 @@ else
 fi
 echo "  Token written to .env"
 
-# --- Create test project ---
+# --- Create test project (use root token so root can see it) ---
 echo "Creating test project..."
 
 PROJECT_RESPONSE=$(curl -sf \
-    --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+    --header "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
     "${GITLAB_URL}/api/v4/projects?search=test-repo" 2>/dev/null || echo "[]")
 
 if echo "$PROJECT_RESPONSE" | grep -q '"path":"test-repo"'; then
@@ -115,13 +120,13 @@ if echo "$PROJECT_RESPONSE" | grep -q '"path":"test-repo"'; then
     PROJECT_ID=$(echo "$PROJECT_RESPONSE" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 else
     CREATE_RESPONSE=$(curl -sf --request POST \
-        --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+        --header "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
         --header "Content-Type: application/json" \
         --data '{
             "name": "test-repo",
             "path": "test-repo",
             "initialize_with_readme": true,
-            "visibility": "internal"
+            "visibility": "public"
         }' \
         "${GITLAB_URL}/api/v4/projects" 2>/dev/null)
 
@@ -140,14 +145,14 @@ echo "Configuring webhook..."
 WEBHOOK_URL="http://review-bot:8888/webhook"
 
 EXISTING_HOOKS=$(curl -sf \
-    --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+    --header "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
     "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/hooks" 2>/dev/null || echo "[]")
 
 if echo "$EXISTING_HOOKS" | grep -q "review-bot:8888/webhook"; then
     echo "  Webhook already configured."
 else
     curl -sf --request POST \
-        --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+        --header "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
         --header "Content-Type: application/json" \
         --data "{
             \"url\": \"${WEBHOOK_URL}\",
@@ -171,7 +176,7 @@ echo ""
 echo "=== GitLab Initialization Complete ==="
 echo "  GitLab URL:  ${GITLAB_URL}"
 echo "  Bot User:    ${BOT_USERNAME}"
-echo "  Project:     ${BOT_USERNAME}/test-repo (ID: ${PROJECT_ID})"
+echo "  Project:     root/test-repo (ID: ${PROJECT_ID})"
 echo "  Webhook:     ${WEBHOOK_URL}"
 echo "  Token:       ${GITLAB_TOKEN:0:8}..."
 echo ""
