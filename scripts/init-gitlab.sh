@@ -23,42 +23,68 @@ echo "=== Initializing GitLab ==="
 # Wait for GitLab to be healthy
 "$SCRIPT_DIR/wait-for-gitlab.sh" "$GITLAB_URL" 300
 
-# --- Create bot user (if not exists) ---
-echo "Creating bot user..."
-
 BOT_USERNAME="${BOT_USERNAME:-ai-reviewer}"
 BOT_NAME="${BOT_NAME:-AI Code Reviewer}"
 
-docker exec gitlab gitlab-rails runner "
-bot = User.find_by_username('${BOT_USERNAME}')
-if bot
-  puts 'Bot user already exists: ${BOT_USERNAME}'
-else
-  bot = User.create!(
-    username: '${BOT_USERNAME}',
-    name: '${BOT_NAME}',
-    email: '${BOT_USERNAME}@gitlab.local',
-    password: SecureRandom.hex(16),
-    admin: false,
-    skip_confirmation: true
-  )
-  puts 'Created bot user: ${BOT_USERNAME}'
-end
-" 2>/dev/null
+# --- Create bot user via API (if not exists) ---
+echo "Creating bot user..."
 
-# --- Create Personal Access Token (idempotent) ---
+# First, get root token to create user
+ROOT_TOKEN=$(docker exec gitlab gitlab-rails runner "
+token = PersonalAccessToken.find_by(name: 'root-init-token', revoked: false)
+if token && !token.expired?
+  puts token.token
+else
+  user = User.find_by_username('root')
+  token = user.personal_access_tokens.create!(
+    name: 'root-init-token',
+    scopes: [:api],
+    expires_at: 365.days.from_now
+  )
+  puts token.token
+end
+" 2>/dev/null)
+
+if [ -z "$ROOT_TOKEN" ]; then
+    echo "ERROR: Failed to create root token."
+    exit 1
+fi
+
+# Check if bot user exists
+BOT_EXISTS=$(curl -sf \
+    --header "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
+    "${GITLAB_URL}/api/v4/users?username=${BOT_USERNAME}" 2>/dev/null | grep -c "\"username\":\"${BOT_USERNAME}\"" || echo "0")
+
+if [ "$BOT_EXISTS" -ge 1 ]; then
+    echo "  Bot user already exists: ${BOT_USERNAME}"
+else
+    # Create bot user via API
+    curl -sf --request POST \
+        --header "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data "{
+            \"username\": \"${BOT_USERNAME}\",
+            \"name\": \"${BOT_NAME}\",
+            \"email\": \"${BOT_USERNAME}@gitlab.local\",
+            \"password\": \"$(openssl rand -hex 16)\",
+            \"skip_confirmation\": true
+        }" \
+        "${GITLAB_URL}/api/v4/users" >/dev/null
+
+    echo "  Created bot user: ${BOT_USERNAME}"
+fi
+
+# --- Create Personal Access Token for bot user (idempotent) ---
 echo "Creating Personal Access Token..."
 
-TOKEN_NAME="review-bot-token"
-
 GITLAB_TOKEN=$(docker exec gitlab gitlab-rails runner "
-token = PersonalAccessToken.find_by(name: '${TOKEN_NAME}', revoked: false)
+token = PersonalAccessToken.find_by(name: 'review-bot-token', revoked: false)
 if token && !token.expired?
   puts token.token
 else
   user = User.find_by_username('${BOT_USERNAME}') || User.find_by_username('root')
   token = user.personal_access_tokens.create!(
-    name: '${TOKEN_NAME}',
+    name: 'review-bot-token',
     scopes: [:api, :read_api, :read_repository, :write_repository],
     expires_at: 365.days.from_now
   )
