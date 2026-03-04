@@ -13,7 +13,8 @@ elapsed=0
 interval=5
 
 while [ "$elapsed" -lt "$TIMEOUT" ]; do
-    if curl -sf "${GITLAB_URL}/-/health" >/dev/null 2>&1; then
+    # Check login page (returns 200 when GitLab is ready)
+    if curl -sf -o /dev/null -w "%{http_code}" "${GITLAB_URL}/users/sign_in" 2>/dev/null | grep -q "200"; then
         echo "GitLab is healthy after ${elapsed}s."
         exit 0
     fi
