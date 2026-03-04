@@ -1,0 +1,19 @@
+stages:
+  - test
+  - lint
+
+test:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - echo "Running tests..."
+    - python -m py_compile src/bad_example.py
+  allow_failure: false
+
+lint:
+  stage: lint
+  image: python:3.12-slim
+  script:
+    - pip install flake8 --quiet
+    - flake8 src/ --max-line-length=120 || true
+  allow_failure: true

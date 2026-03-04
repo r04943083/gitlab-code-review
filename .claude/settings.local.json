@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:docs.gitlab.com)",
+      "WebFetch(domain:devcenter.upsun.com)",
+      "WebFetch(domain:dev.to)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:kas.kim)",
+      "WebFetch(domain:gorannikolovski.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:www.augmentcode.com)",
+      "WebFetch(domain:5ly.co)",
+      "WebFetch(domain:aikchar.dev)",
+      "WebFetch(domain:crashoverride.com)",
+      "Bash(cat /home/willu/.claude/projects/-home-willu-work-code-review/410b5687-1201-48ec-b8e3-b7ba1284be77/tool-results/toolu_01Nj9gwFwYSZDdNWe76byT4T.json | python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(data[0]['text']\\)\" | head -500)",
+      "Bash(cat /home/willu/.claude/projects/-home-willu-work-code-review/410b5687-1201-48ec-b8e3-b7ba1284be77/tool-results/toolu_01Nj9gwFwYSZDdNWe76byT4T.json | python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(data[0]['text']\\)\" | wc -l)",
+      "Bash(cat /home/willu/.claude/projects/-home-willu-work-code-review/410b5687-1201-48ec-b8e3-b7ba1284be77/tool-results/toolu_01Nj9gwFwYSZDdNWe76byT4T.json | python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(data[0]['text']\\)\" | sed -n '500,1000p')",
+      "Bash(cat /home/willu/.claude/projects/-home-willu-work-code-review/410b5687-1201-48ec-b8e3-b7ba1284be77/tool-results/toolu_01Nj9gwFwYSZDdNWe76byT4T.json | python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(data[0]['text']\\)\" | sed -n '1000,1500p')",
+      "Bash(cat /home/willu/.claude/projects/-home-willu-work-code-review/410b5687-1201-48ec-b8e3-b7ba1284be77/tool-results/toolu_01Nj9gwFwYSZDdNWe76byT4T.json | python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(data[0]['text']\\)\" | sed -n '1500,1820p')",
+      "Bash(chmod +x /home/willu/work/code-review/scripts/*.sh && ls -la /home/willu/work/code-review/scripts/)",
+      "Bash(git config user.name && git config user.email)",
+      "Bash(git init && git remote add origin https://github.com/r04943083/gitlab-code-review.git)",
+      "Bash(git add . && git status)"
+    ]
+  }
+}

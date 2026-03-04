@@ -1,0 +1,76 @@
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:16.11.10-ce.0
+    container_name: gitlab
+    hostname: gitlab
+    ports:
+      - "${GITLAB_PORT:-8080}:8080"
+    shm_size: "256m"
+    environment:
+      GITLAB_ROOT_PASSWORD: "${GITLAB_ROOT_PASSWORD:-changeme123}"
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://gitlab:8080'
+        nginx['listen_port'] = 8080
+        nginx['listen_https'] = false
+        puma['worker_processes'] = 2
+        sidekiq['concurrency'] = 5
+        prometheus_monitoring['enable'] = false
+        grafana['enable'] = false
+        gitlab_exporter['enable'] = false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/-/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+    networks:
+      - gl-net
+
+  runner:
+    image: gitlab/gitlab-runner:latest
+    container_name: gitlab-runner
+    depends_on:
+      gitlab:
+        condition: service_healthy
+    volumes:
+      - runner-config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - gl-net
+
+  bot:
+    build: ./bot
+    container_name: review-bot
+    ports:
+      - "${BOT_PORT:-8888}:8888"
+    depends_on:
+      gitlab:
+        condition: service_healthy
+    environment:
+      - GITLAB_INTERNAL_URL=http://gitlab:8080
+      - GITLAB_TOKEN=${GITLAB_TOKEN}
+      - GITLAB_WEBHOOK_SECRET=${GITLAB_WEBHOOK_SECRET}
+      - LLM_PROVIDER=${LLM_PROVIDER}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_API_BASE=${LLM_API_BASE}
+      - LLM_MODEL=${LLM_MODEL}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-4096}
+      - MIN_SEVERITY=${MIN_SEVERITY:-medium}
+      - MAX_DIFF_CHARS=${MAX_DIFF_CHARS:-30000}
+      - BOT_PORT=${BOT_PORT:-8888}
+    networks:
+      - gl-net
+
+networks:
+  gl-net:
+    driver: bridge
+
+volumes:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:
+  runner-config:
