@@ -23,7 +23,7 @@ fi
 GITLAB_URL="http://localhost:${GITLAB_PORT:-8080}"
 BOT_USERNAME="${BOT_USERNAME:-ai-reviewer}"
 PROJECT_PATH="${BOT_USERNAME}/test-repo"
-PROJECT_ENCODED=$(echo -n "${PROJECT_PATH}" | jq -sRr @uri)
+PROJECT_ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${PROJECT_PATH}', safe=''))")
 BRANCH_NAME="test-bad-code-$(date +%s)"
 POLL_TIMEOUT=120
 
