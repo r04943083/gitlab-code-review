@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     MAX_DIFF_CHARS: int = 30000
     MAX_FILE_SIZE: int = 100000
 
+    # Language preference: "zh" (Chinese) or "en" (English)
+    REVIEW_LANGUAGE: str = "zh"
+
     # App
     LOG_LEVEL: str = "INFO"
     BOT_PORT: int = 8888

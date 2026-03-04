@@ -8,7 +8,7 @@ import anthropic
 import openai
 
 from config import Settings
-from prompts import SYSTEM_PROMPT
+from prompts import get_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 class LLMClient:
     def __init__(self, config: Settings):
         self.config = config
+        self.system_prompt = get_system_prompt(config.REVIEW_LANGUAGE)
 
     async def review(self, user_prompt: str) -> dict:
         """Send the review prompt to the configured LLM and return parsed JSON."""
@@ -36,7 +37,7 @@ class LLMClient:
             async with client.messages.stream(
                 model=self.config.LLM_MODEL,
                 max_tokens=self.config.LLM_MAX_TOKENS,
-                system=SYSTEM_PROMPT,
+                system=self.system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             ) as stream:
                 result = []
@@ -55,7 +56,7 @@ class LLMClient:
             response = await client.chat.completions.create(
                 model=self.config.LLM_MODEL,
                 messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
                 max_tokens=self.config.LLM_MAX_TOKENS,

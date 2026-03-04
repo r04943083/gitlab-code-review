@@ -6,7 +6,7 @@ from config import Settings
 from gitlab_client import GitLabClient
 from llm_client import LLMClient
 from models import InlineComment, ReviewResult
-from prompts import build_user_prompt
+from prompts import build_user_prompt, get_system_prompt
 
 logger = logging.getLogger(__name__)
 

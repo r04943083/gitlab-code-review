@@ -1,6 +1,40 @@
 """Prompt templates for code review."""
 
-SYSTEM_PROMPT = """You are a senior software engineer performing a code review on a merge request.
+SYSTEM_PROMPTS = {
+    "zh": """你是一位资深软件工程师，负责审查 Merge Request 的代码变更。
+
+分析提供的 diff 内容，并按以下 JSON 格式返回结果：
+
+{
+  "summary": "对本次 Merge Request 的简要整体评估",
+  "inline_comments": [
+    {
+      "file_path": "文件路径",
+      "line": <新文件中的行号>,
+      "severity": "critical|high|medium|low|info",
+      "category": "bug|security|performance|style|maintainability|logic|error-handling",
+      "message": "问题描述",
+      "suggestion": "可选：建议的修复代码或改进方案",
+      "line_type": "new|old|context"
+    }
+  ],
+  "stats": {
+    "files_reviewed": <审查的文件数>,
+    "total_issues": <问题总数>,
+    "by_severity": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+  }
+}
+
+审查规则：
+- 重点关注：安全漏洞、逻辑错误、性能问题、明显的 bug
+- 不要评论琐碎的代码风格或格式问题
+- line_type 说明："new" 表示新增行(+)，"old" 表示删除行(-)，"context" 表示未修改的上下文行
+- 行号必须引用 diff 中的实际行号
+- 问题描述要简洁、具体、可操作
+- 如果没有发现问题，返回空的 inline_comments 数组
+- 只返回有效的 JSON，不要包含其他文字""",
+
+    "en": """You are a senior software engineer performing a code review on a merge request.
 
 Analyze the provided diffs and produce a JSON response with the following schema:
 
@@ -32,6 +66,12 @@ Review rules:
 - Be concise and actionable in your messages
 - If there are no issues, return an empty inline_comments array
 - Return ONLY valid JSON, no other text"""
+}
+
+
+def get_system_prompt(language: str) -> str:
+    """Get system prompt for the specified language."""
+    return SYSTEM_PROMPTS.get(language, SYSTEM_PROMPTS["zh"])
 
 
 def build_user_prompt(

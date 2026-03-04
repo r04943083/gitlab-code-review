@@ -19,6 +19,7 @@ services:
       - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-4096}
       - MIN_SEVERITY=${MIN_SEVERITY:-medium}
       - MAX_DIFF_CHARS=${MAX_DIFF_CHARS:-30000}
+      - REVIEW_LANGUAGE=${REVIEW_LANGUAGE:-zh}
       - BOT_PORT=${BOT_PORT:-8888}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     restart: unless-stopped
