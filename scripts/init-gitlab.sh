@@ -139,6 +139,27 @@ if [ -z "${PROJECT_ID:-}" ]; then
     exit 1
 fi
 
+# --- Add bot user as project member ---
+echo "Adding bot user to project..."
+
+BOT_USER_ID=$(curl -sf \
+    --header "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
+    "${GITLAB_URL}/api/v4/users?username=${BOT_USERNAME}" 2>/dev/null | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+
+if [ -n "$BOT_USER_ID" ]; then
+    curl -sf --request POST \
+        --header "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data "{
+            \"user_id\": ${BOT_USER_ID},
+            \"access_level\": 30
+        }" \
+        "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/members" >/dev/null 2>&1
+    echo "  Bot user added as Developer."
+else
+    echo "  Warning: Could not find bot user ID."
+fi
+
 # --- Configure webhook ---
 echo "Configuring webhook..."
 
