@@ -26,26 +26,22 @@ echo "=== Initializing GitLab ==="
 BOT_USERNAME="${BOT_USERNAME:-ai-reviewer}"
 BOT_NAME="${BOT_NAME:-AI Code Reviewer}"
 
-# --- Create root token first ---
+# --- Create root token ---
 echo "Creating root access token..."
 
-ROOT_TOKEN=$(docker exec gitlab gitlab-rails runner "
-token = PersonalAccessToken.find_by(name: 'root-init-token', revoked: false)
-if token && !token.expired?
-  puts token.token
-else
-  user = User.find_by_username('root')
-  token = user.personal_access_tokens.create!(
-    name: 'root-init-token',
-    scopes: [:api],
-    expires_at: 365.days.from_now
-  )
-  puts token.token
-end
-" 2>&1 | grep -E "^glpat-" | head -1)
+ROOT_TOKEN=$(docker exec gitlab gitlab-rails runner '
+user = User.find_by_username("root")
+token = user.personal_access_tokens.create!(
+  name: "root-api-token",
+  scopes: [:api],
+  expires_at: 365.days.from_now
+)
+puts token.token
+' 2>&1 | tail -1)
 
-if [ -z "$ROOT_TOKEN" ]; then
+if [ -z "$ROOT_TOKEN" ] || [[ ! "$ROOT_TOKEN" =~ ^glpat- ]]; then
     echo "ERROR: Failed to create root token."
+    echo "  Output: $ROOT_TOKEN"
     exit 1
 fi
 echo "  Root token: ${ROOT_TOKEN:0:8}..."
@@ -74,36 +70,26 @@ else
         "${GITLAB_URL}/api/v4/users" >/dev/null 2>&1
 
     echo "  Created bot user: ${BOT_USERNAME}"
-    # Wait for user to be fully created
     sleep 2
 fi
 
-# --- Create Personal Access Token for bot user ---
+# --- Create bot token ---
 echo "Creating bot access token..."
 
-GITLAB_TOKEN=$(docker exec gitlab gitlab-rails runner "
-user = User.find_by_username('${BOT_USERNAME}')
-if user.nil?
-  puts 'ERROR: User not found'
-else
-  token = PersonalAccessToken.find_by(name: 'review-bot-token', user: user, revoked: false)
-  if token && !token.expired?
-    puts token.token
-  else
-    token = user.personal_access_tokens.create!(
-      name: 'review-bot-token',
-      scopes: [:api, :read_api, :read_repository, :write_repository],
-      expires_at: 365.days.from_now
-    )
-    puts token.token
-  end
+GITLAB_TOKEN=$(docker exec gitlab gitlab-rails runner '
+user = User.find_by_username("'"${BOT_USERNAME}"'")
+if user
+  token = user.personal_access_tokens.create!(
+    name: "review-bot-token",
+    scopes: [:api, :read_api, :read_repository, :write_repository],
+    expires_at: 365.days.from_now
+  )
+  puts token.token
 end
-" 2>&1 | grep -E "^glpat-" | head -1)
+' 2>&1 | tail -1)
 
-if [ -z "$GITLAB_TOKEN" ]; then
-    echo "ERROR: Failed to create bot token."
-    # Fallback to root token
-    echo "  Using root token as fallback..."
+if [ -z "$GITLAB_TOKEN" ] || [[ ! "$GITLAB_TOKEN" =~ ^glpat- ]]; then
+    echo "  Bot token creation failed, using root token..."
     GITLAB_TOKEN="$ROOT_TOKEN"
 fi
 
@@ -117,7 +103,7 @@ else
 fi
 echo "  Token written to .env"
 
-# --- Create test project (if not exists) ---
+# --- Create test project ---
 echo "Creating test project..."
 
 PROJECT_RESPONSE=$(curl -sf \
@@ -153,7 +139,6 @@ echo "Configuring webhook..."
 
 WEBHOOK_URL="http://review-bot:8888/webhook"
 
-# Check existing hooks
 EXISTING_HOOKS=$(curl -sf \
     --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
     "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/hooks" 2>/dev/null || echo "[]")
@@ -176,7 +161,7 @@ else
     echo "  Webhook configured: ${WEBHOOK_URL}"
 fi
 
-# --- Restart bot to pick up new token ---
+# --- Restart bot ---
 echo "Restarting bot container..."
 docker compose down bot 2>/dev/null || true
 docker compose up -d bot
