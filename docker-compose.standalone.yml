@@ -1,0 +1,33 @@
+# Standalone deployment for existing GitLab instances
+# Usage: docker compose -f docker-compose.standalone.yml up -d
+
+services:
+  bot:
+    build: ./bot
+    container_name: review-bot
+    ports:
+      - "${BOT_PORT:-8888}:8888"
+    environment:
+      - GITLAB_URL=${GITLAB_URL}
+      - GITLAB_INTERNAL_URL=${GITLAB_INTERNAL_URL:-${GITLAB_URL}}
+      - GITLAB_TOKEN=${GITLAB_TOKEN}
+      - GITLAB_WEBHOOK_SECRET=${GITLAB_WEBHOOK_SECRET}
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_API_BASE=${LLM_API_BASE}
+      - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-20250514}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-4096}
+      - MIN_SEVERITY=${MIN_SEVERITY:-medium}
+      - MAX_DIFF_CHARS=${MAX_DIFF_CHARS:-30000}
+      - BOT_PORT=${BOT_PORT:-8888}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+    extra_hosts:
+      # Allow container to access host network (Linux)
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
