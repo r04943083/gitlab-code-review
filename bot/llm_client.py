@@ -32,13 +32,17 @@ class LLMClient:
             base_url=self.config.LLM_API_BASE,
         )
         try:
-            message = await client.messages.create(
+            # Use streaming to support long-running requests
+            async with client.messages.stream(
                 model=self.config.LLM_MODEL,
                 max_tokens=self.config.LLM_MAX_TOKENS,
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_prompt}],
-            )
-            return message.content[0].text
+            ) as stream:
+                result = []
+                async for text in stream.text_stream:
+                    result.append(text)
+                return "".join(result)
         finally:
             await client.close()
 
