@@ -13,6 +13,7 @@ services:
         nginx['listen_port'] = 8080
         nginx['listen_https'] = false
         puma['worker_processes'] = 2
+        puma['port'] = nil
         sidekiq['concurrency'] = 5
         prometheus_monitoring['enable'] = false
         grafana['enable'] = false
