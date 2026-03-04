@@ -22,7 +22,10 @@
       "Bash(chmod +x /home/willu/work/code-review/scripts/*.sh && ls -la /home/willu/work/code-review/scripts/)",
       "Bash(git config user.name && git config user.email)",
       "Bash(git init && git remote add origin https://github.com/r04943083/gitlab-code-review.git)",
-      "Bash(git add . && git status)"
+      "Bash(git add . && git status)",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nInitial commit: GitLab Code Review Bot\n\n- Add bot service with LLM-powered code review\n- Add GitLab CI/CD integration\n- Add Docker setup for local development\n- Add sample project for testing\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push -u origin master)",
+      "Bash(git remote set-url origin git@github.com:r04943083/gitlab-code-review.git && git push -u origin master)"
     ]
   }
 }

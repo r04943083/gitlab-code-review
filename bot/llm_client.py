@@ -27,7 +27,10 @@ class LLMClient:
         return self.parse_json_response(raw)
 
     async def _call_anthropic(self, user_prompt: str) -> str:
-        client = anthropic.AsyncAnthropic(api_key=self.config.LLM_API_KEY)
+        client = anthropic.AsyncAnthropic(
+            api_key=self.config.LLM_API_KEY,
+            base_url=self.config.LLM_API_BASE,
+        )
         try:
             message = await client.messages.create(
                 model=self.config.LLM_MODEL,
