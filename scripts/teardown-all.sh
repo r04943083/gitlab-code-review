@@ -6,8 +6,9 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_DIR"
 
-echo "=== Tearing Down Code Review Bot ==="
+echo "=== 移除所有容器和卷 ==="
 
 docker compose down -v --remove-orphans
 
-echo "=== Teardown Complete ==="
+echo "所有容器和卷已移除。"
+echo "重新开始: bash scripts/01-install-gitlab.sh"

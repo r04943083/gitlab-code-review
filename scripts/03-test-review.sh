@@ -8,7 +8,7 @@ cd "$PROJECT_DIR"
 
 # Source .env
 if [ ! -f .env ]; then
-    echo "ERROR: .env file not found. Run setup.sh and init-gitlab.sh first."
+    echo "ERROR: .env 文件不存在。请先运行 01 和 02 脚本。"
     exit 1
 fi
 set -a
@@ -16,20 +16,35 @@ source .env
 set +a
 
 if [ -z "${GITLAB_TOKEN:-}" ]; then
-    echo "ERROR: GITLAB_TOKEN is not set. Run init-gitlab.sh first."
+    echo "ERROR: GITLAB_TOKEN 未设置。请先运行: bash scripts/02-setup-bot.sh"
     exit 1
 fi
 
 GITLAB_URL="http://localhost:${GITLAB_PORT:-8080}"
+BOT_URL="http://localhost:${BOT_PORT:-8888}"
 PROJECT_PATH="root/test-repo"
 PROJECT_ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${PROJECT_PATH}', safe=''))")
 BRANCH_NAME="test-bad-code-$(date +%s)"
 POLL_TIMEOUT=120
 
-echo "=== End-to-End Review Test ==="
+echo "=== 端到端测试 ==="
 
-# --- Create branch ---
-echo "Creating branch '${BRANCH_NAME}'..."
+# --- 检查 GitLab ---
+if ! curl -sf -o /dev/null "${GITLAB_URL}/-/health" 2>/dev/null; then
+    echo "ERROR: GitLab 不可用。请先运行: bash scripts/01-install-gitlab.sh"
+    exit 1
+fi
+
+# --- 检查 Bot ---
+if ! curl -sf -o /dev/null "${BOT_URL}/health" 2>/dev/null; then
+    echo "ERROR: Bot 不可用。请先运行: bash scripts/02-setup-bot.sh"
+    exit 1
+fi
+
+echo "  GitLab 和 Bot 均已就绪。"
+
+# --- 创建分支 ---
+echo "创建分支 '${BRANCH_NAME}'..."
 
 curl -sf --request POST \
     --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
@@ -40,10 +55,10 @@ curl -sf --request POST \
     }" \
     "${GITLAB_URL}/api/v4/projects/${PROJECT_ENCODED}/repository/branches" >/dev/null
 
-echo "  Branch created."
+echo "  分支已创建。"
 
-# --- Commit bad code ---
-echo "Committing bad_example.cpp..."
+# --- 提交有问题的代码 ---
+echo "提交 bad_example.cpp..."
 
 BAD_CODE=$(cat <<'CPPEOF'
 #include <iostream>
@@ -103,30 +118,24 @@ public:
     void readFromFile(const char* filename) {
         ifstream file(filename);
         if (!file.is_open()) {
-            // Should throw exception or return error
             cout << "Error opening file" << endl;
             return;
         }
         file.read(buffer, MAX_SIZE);
-        // No error checking on read
     }
 };
 
 // C-style code in C++ - should use smart pointers
 void legacyFunction(char* data) {
     char localBuffer[100];
-    // Potential buffer overflow
     strcpy(localBuffer, data);
 
-    // Memory leak
     char* dynamicMem = (char*)malloc(256);
     // Missing free()
 
-    // Using deprecated function
     gets(localBuffer);  // Extremely dangerous
 
-    // Format string vulnerability
-    printf(data);  // Should be printf("%s", data)
+    printf(data);  // Format string vulnerability
 }
 
 // Infinite recursion potential
@@ -147,7 +156,6 @@ void processArray() {
 void executeQuery(const char* username) {
     char query[512];
     sprintf(query, "SELECT * FROM users WHERE username = '%s'", username);
-    // executeSQL(query);  // SQL injection
 }
 
 // Resource leak
@@ -158,28 +166,22 @@ void fileOperations() {
     if (!f1) {
         return;  // f2 leaked if f1 is null
     }
-
-    // More operations...
     // Missing fclose() calls
 }
 
 int main(int argc, char* argv[]) {
-    // No argument validation
     DataProcessor processor;
     processor.processInput(argv[1]);  // Crash if no args
 
-    // Using magic numbers
     int data[100];
     for (int i = 0; i < 100; i++) {
         data[i] = i * 2;
     }
 
-    // Integer overflow potential
-    int result = 1000000 * 1000000;  // Overflow on 32-bit
+    int result = 1000000 * 1000000;  // Integer overflow
 
-    // Null pointer dereference
     char* ptr = nullptr;
-    if (strlen(ptr) > 0) {  // Crash!
+    if (strlen(ptr) > 0) {  // Null pointer dereference
         cout << ptr << endl;
     }
 
@@ -205,10 +207,10 @@ curl -sf --request POST \
     }" \
     "${GITLAB_URL}/api/v4/projects/${PROJECT_ENCODED}/repository/commits" >/dev/null
 
-echo "  Bad code committed."
+echo "  代码已提交。"
 
-# --- Create merge request ---
-echo "Creating merge request..."
+# --- 创建 MR ---
+echo "创建 Merge Request..."
 
 MR_RESPONSE=$(curl -sf --request POST \
     --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
@@ -224,16 +226,16 @@ MR_RESPONSE=$(curl -sf --request POST \
 MR_IID=$(echo "$MR_RESPONSE" | grep -o '"iid":[0-9]*' | head -1 | cut -d: -f2)
 
 if [ -z "${MR_IID:-}" ]; then
-    echo "ERROR: Failed to create merge request."
+    echo "ERROR: 创建 MR 失败。"
     echo "$MR_RESPONSE"
     exit 1
 fi
 
-echo "  Merge request created: !${MR_IID}"
+echo "  MR 已创建: !${MR_IID}"
 echo "  URL: ${GITLAB_URL}/${PROJECT_PATH}/-/merge_requests/${MR_IID}"
 
-# --- Poll for bot comments ---
-echo "Waiting for bot review comment (timeout: ${POLL_TIMEOUT}s)..."
+# --- 轮询等待 bot 评论 ---
+echo "等待 bot 审查评论 (超时: ${POLL_TIMEOUT}s)..."
 
 elapsed=0
 interval=5
@@ -243,17 +245,13 @@ while [ "$elapsed" -lt "$POLL_TIMEOUT" ]; do
         --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
         "${GITLAB_URL}/api/v4/projects/${PROJECT_ENCODED}/merge_requests/${MR_IID}/notes" 2>/dev/null || echo "[]")
 
-    # Check for notes not authored by root (i.e., from the bot)
-    # Or check for notes containing review-related keywords
     NOTE_COUNT=$(echo "$NOTES" | grep -c '"body"' || true)
 
     if [ "$NOTE_COUNT" -gt 0 ]; then
-        # Check if any note looks like a bot review (not the system notes)
         if echo "$NOTES" | grep -q '"system":false'; then
             echo ""
-            echo "=== Bot comment detected after ${elapsed}s ==="
+            echo "=== Bot 评论已检测到 (${elapsed}s) ==="
             echo ""
-            # Print the first non-system note body
             echo "$NOTES" | python3 -c "
 import sys, json
 notes = json.load(sys.stdin)
@@ -264,17 +262,17 @@ for n in notes:
         break
 " 2>/dev/null || echo "$NOTES" | head -20
             echo ""
-            echo "=== Test PASSED ==="
+            echo "=== 测试通过 ==="
             exit 0
         fi
     fi
 
     sleep "$interval"
     elapsed=$((elapsed + interval))
-    echo "  ...polling (${elapsed}s elapsed)"
+    echo "  ...轮询中 (${elapsed}s)"
 done
 
 echo ""
-echo "=== Test FAILED: No bot comment within ${POLL_TIMEOUT}s ==="
-echo "Check bot logs: docker compose logs bot"
+echo "=== 测试失败: ${POLL_TIMEOUT}s 内未检测到 bot 评论 ==="
+echo "检查 bot 日志: docker compose logs bot"
 exit 1

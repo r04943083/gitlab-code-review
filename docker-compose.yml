@@ -25,6 +25,7 @@ services:
       timeout: 10s
       retries: 20
       start_period: 300s
+    restart: unless-stopped
     volumes:
       - gitlab-config:/etc/gitlab
       - gitlab-logs:/var/log/gitlab
@@ -65,6 +66,12 @@ services:
       - MAX_DIFF_CHARS=${MAX_DIFF_CHARS:-30000}
       - REVIEW_LANGUAGE=${REVIEW_LANGUAGE:-zh}
       - BOT_PORT=${BOT_PORT:-8888}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - gl-net
 
