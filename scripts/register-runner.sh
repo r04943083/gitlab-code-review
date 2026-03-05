@@ -6,6 +6,7 @@ export EDITOR=cat
 export VISUAL=cat
 export GIT_EDITOR=cat
 export LESSEDIT=cat
+export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "VS Code" | tr '\n' ':' | sed 's/:$//')
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"

@@ -6,6 +6,7 @@ export EDITOR=cat
 export VISUAL=cat
 export GIT_EDITOR=cat
 export LESSEDIT=cat
+export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "VS Code" | tr '\n' ':' | sed 's/:$//')
 
 # Wait for GitLab to become healthy
 # Usage: wait-for-gitlab.sh [url] [timeout_seconds]
