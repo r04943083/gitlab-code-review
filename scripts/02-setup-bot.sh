@@ -187,6 +187,13 @@ else
     echo "  警告: 未找到 bot 用户 ID。"
 fi
 
+# --- 允许本地网络 webhook ---
+echo "启用本地网络 webhook..."
+docker exec gitlab gitlab-rails runner '
+ApplicationSetting.first.update!(allow_local_requests_from_web_hooks_and_services: true)
+' 2>/dev/null
+echo "  已启用。"
+
 # --- 配置 webhook（幂等） ---
 echo "配置 webhook..."
 
