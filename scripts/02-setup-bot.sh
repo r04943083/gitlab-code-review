@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prevent editor from popping up
+# Prevent VSCode popup in WSL
 export EDITOR=cat
 export VISUAL=cat
 export GIT_EDITOR=cat
+export LESSEDIT=cat
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"

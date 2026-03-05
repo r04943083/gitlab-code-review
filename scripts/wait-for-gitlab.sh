@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Prevent VSCode popup in WSL
+export EDITOR=cat
+export VISUAL=cat
+export GIT_EDITOR=cat
+export LESSEDIT=cat
+
 # Wait for GitLab to become healthy
 # Usage: wait-for-gitlab.sh [url] [timeout_seconds]
 
