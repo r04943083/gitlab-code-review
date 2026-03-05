@@ -115,9 +115,99 @@ Return ONLY valid JSON, no other text."""
 }
 
 
+CPP_REVIEW_SUPPLEMENTS = {
+    "zh": """
+## C/C++ 专项审查要点
+
+### 内存安全
+- RAII 违规：手动 new/delete 未封装在 RAII 类或智能指针中
+- Rule of Three/Five：定义了析构函数但缺少拷贝构造/赋值运算符（反之亦然）
+- Use-after-free：释放后继续使用指针
+- Double-free：同一指针多次释放
+- 悬空引用/指针：返回局部变量的引用或指针
+
+### 现代 C++ 实践
+- 优先使用 `std::unique_ptr`/`std::shared_ptr` 替代 raw pointer
+- 优先使用 `std::string` 替代 `char*`
+- 使用 `enum class` 替代 plain enum
+- 适当使用 `constexpr`、`auto`、range-based for
+
+### 并发安全
+- 数据竞争：多线程访问共享变量未加锁
+- 死锁：不一致的加锁顺序
+- 缺少 `std::lock_guard`/`std::unique_lock` 的 RAII 锁管理
+
+### C++ 反模式
+- 头文件中 `using namespace std`（污染全局命名空间）
+- 缺少 include guard 或 `#pragma once`
+- C-style cast（应使用 `static_cast`/`dynamic_cast`/`reinterpret_cast`）
+- 析构函数抛出异常
+- 对象切片（通过值传递多态对象）
+- 基类缺少虚析构函数
+
+### 不安全 C 遗留函数（在 C++ 中应避免）
+- `strcpy`/`strcat` → 使用 `std::string` 或 `strncpy`
+- `sprintf` → 使用 `snprintf` 或 `std::format`
+- `gets` → 已废弃，使用 `std::getline`
+- `system()` → 避免命令注入，使用安全的替代方案
+- `malloc`/`free` → 在 C++ 中使用 `new`/`delete` 或智能指针
+""",
+
+    "en": """
+## C/C++ Specific Review Guidelines
+
+### Memory Safety
+- RAII violations: raw new/delete not wrapped in RAII classes or smart pointers
+- Rule of Three/Five: destructor defined but missing copy constructor/assignment operator (or vice versa)
+- Use-after-free: accessing memory after deallocation
+- Double-free: freeing the same pointer twice
+- Dangling references/pointers: returning references or pointers to local variables
+
+### Modern C++ Practices
+- Prefer `std::unique_ptr`/`std::shared_ptr` over raw pointers
+- Prefer `std::string` over `char*`
+- Use `enum class` instead of plain enum
+- Use `constexpr`, `auto`, range-based for where appropriate
+
+### Concurrency Safety
+- Data races: shared variable access without synchronization
+- Deadlocks: inconsistent lock ordering
+- Missing RAII lock management (`std::lock_guard`/`std::unique_lock`)
+
+### C++ Anti-patterns
+- `using namespace std` in header files (namespace pollution)
+- Missing include guards or `#pragma once`
+- C-style casts (use `static_cast`/`dynamic_cast`/`reinterpret_cast`)
+- Throwing exceptions in destructors
+- Object slicing (passing polymorphic objects by value)
+- Missing virtual destructor in base classes
+
+### Unsafe C Legacy Functions (avoid in C++)
+- `strcpy`/`strcat` → use `std::string` or `strncpy`
+- `sprintf` → use `snprintf` or `std::format`
+- `gets` → deprecated, use `std::getline`
+- `system()` → avoid command injection, use safe alternatives
+- `malloc`/`free` → use `new`/`delete` or smart pointers in C++
+"""
+}
+
+# File extensions that trigger C/C++ supplement
+CPP_EXTENSIONS = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"}
+
+
 def get_system_prompt(language: str) -> str:
     """Get system prompt for the specified language."""
     return SYSTEM_PROMPTS.get(language, SYSTEM_PROMPTS["zh"])
+
+
+def get_file_type_supplement(file_extensions: set[str], language: str) -> str:
+    """Return language-specific review supplement based on file extensions.
+
+    Returns C/C++ supplement if any C/C++ file extensions are detected.
+    """
+    if file_extensions & CPP_EXTENSIONS:
+        return CPP_REVIEW_SUPPLEMENTS.get(language, CPP_REVIEW_SUPPLEMENTS["zh"])
+    return ""
 
 
 def build_user_prompt(

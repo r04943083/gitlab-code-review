@@ -1,12 +1,13 @@
 """Review orchestrator that ties together GitLab, LLM, and posting results."""
 
 import logging
+import os
 
 from config import Settings
 from gitlab_client import GitLabClient
 from llm_client import LLMClient
 from models import InlineComment, ReviewResult
-from prompts import build_user_prompt, get_system_prompt
+from prompts import build_user_prompt, get_file_type_supplement, get_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +64,21 @@ class ReviewOrchestrator:
                 diff_dicts, mr_title, mr_description, self.config.MAX_DIFF_CHARS
             )
 
-            # 5. Call LLM
-            result_data = await self.llm.review(user_prompt)
+            # 5. Build dynamic system prompt with file-type supplements
+            extensions = {os.path.splitext(d.new_path)[1].lower() for d in filtered}
+            system_prompt = get_system_prompt(self.config.REVIEW_LANGUAGE)
+            supplement = get_file_type_supplement(extensions, self.config.REVIEW_LANGUAGE)
+            if supplement:
+                system_prompt += "\n\n" + supplement
+                logger.info("C++ supplement appended to system prompt")
 
-            # 6. Parse response
+            # 6. Call LLM
+            result_data = await self.llm.review(user_prompt, system_prompt)
+
+            # 7. Parse response
             result = ReviewResult(**result_data)
 
-            # 7. Post inline comments (filtered by severity)
+            # 8. Post inline comments (filtered by severity)
             posted = 0
             for comment in result.inline_comments:
                 if self.config.should_post_comment(comment.severity):
@@ -78,7 +87,7 @@ class ReviewOrchestrator:
                     )
                     posted += 1
 
-            # 8. Post summary note
+            # 9. Post summary note
             summary = self._build_summary(result, posted)
             await self.gitlab.post_mr_note(project_id, mr_iid, summary)
 

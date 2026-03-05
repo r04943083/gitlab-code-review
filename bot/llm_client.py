@@ -8,7 +8,6 @@ import anthropic
 import openai
 
 from config import Settings
-from prompts import get_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -16,18 +15,17 @@ logger = logging.getLogger(__name__)
 class LLMClient:
     def __init__(self, config: Settings):
         self.config = config
-        self.system_prompt = get_system_prompt(config.REVIEW_LANGUAGE)
 
-    async def review(self, user_prompt: str) -> dict:
+    async def review(self, user_prompt: str, system_prompt: str) -> dict:
         """Send the review prompt to the configured LLM and return parsed JSON."""
         if self.config.LLM_PROVIDER == "anthropic":
-            raw = await self._call_anthropic(user_prompt)
+            raw = await self._call_anthropic(user_prompt, system_prompt)
         else:
-            raw = await self._call_openai_compatible(user_prompt)
+            raw = await self._call_openai_compatible(user_prompt, system_prompt)
 
         return self.parse_json_response(raw)
 
-    async def _call_anthropic(self, user_prompt: str) -> str:
+    async def _call_anthropic(self, user_prompt: str, system_prompt: str) -> str:
         client = anthropic.AsyncAnthropic(
             api_key=self.config.LLM_API_KEY,
             base_url=self.config.LLM_API_BASE,
@@ -37,7 +35,7 @@ class LLMClient:
             async with client.messages.stream(
                 model=self.config.LLM_MODEL,
                 max_tokens=self.config.LLM_MAX_TOKENS,
-                system=self.system_prompt,
+                system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             ) as stream:
                 result = []
@@ -47,7 +45,7 @@ class LLMClient:
         finally:
             await client.close()
 
-    async def _call_openai_compatible(self, user_prompt: str) -> str:
+    async def _call_openai_compatible(self, user_prompt: str, system_prompt: str) -> str:
         client = openai.AsyncOpenAI(
             api_key=self.config.LLM_API_KEY or "no-key",
             base_url=self.config.LLM_API_BASE,
@@ -56,7 +54,7 @@ class LLMClient:
             response = await client.chat.completions.create(
                 model=self.config.LLM_MODEL,
                 messages=[
-                    {"role": "system", "content": self.system_prompt},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
                 max_tokens=self.config.LLM_MAX_TOKENS,
