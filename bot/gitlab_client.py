@@ -73,13 +73,11 @@ class GitLabClient:
             "old_path": comment.file_path,
         }
 
-        # Set line fields based on line_type
         if comment.line_type == "old":
             position["old_line"] = comment.line
         elif comment.line_type == "new":
             position["new_line"] = comment.line
         else:
-            # context line: set both
             position["old_line"] = comment.line
             position["new_line"] = comment.line
 
