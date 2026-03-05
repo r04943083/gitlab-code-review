@@ -29,6 +29,24 @@ fi
 
 GITLAB_URL="http://localhost:${GITLAB_PORT:-8080}"
 BOT_URL="http://localhost:${BOT_PORT:-8888}"
+
+# 创建 root token 用于测试（MR 必须由非 bot 用户创建才能触发 webhook review）
+echo "获取 root token..."
+ROOT_TOKEN=$(docker exec gitlab gitlab-rails runner '
+user = User.find_by_username("root")
+token = user.personal_access_tokens.create!(
+  name: "test-token-'"$(date +%s)"'",
+  scopes: [:api],
+  expires_at: 1.day.from_now
+)
+puts token.token
+' 2>&1 | tail -1)
+
+if [ -z "$ROOT_TOKEN" ] || [[ ! "$ROOT_TOKEN" =~ ^glpat- ]]; then
+    echo "ERROR: 创建 root token 失败。"
+    exit 1
+fi
+echo "  Root token 已获取。"
 PROJECT_PATH="root/test-repo"
 PROJECT_ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${PROJECT_PATH}', safe=''))")
 BRANCH_NAME="test-bad-code-$(date +%s)"
@@ -54,7 +72,7 @@ echo "  GitLab 和 Bot 均已就绪。"
 echo "创建分支 '${BRANCH_NAME}'..."
 
 curl -sf --request POST \
-    --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+    --header "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
     --header "Content-Type: application/json" \
     --data "{
         \"branch\": \"${BRANCH_NAME}\",
@@ -200,7 +218,7 @@ CPPEOF
 ENCODED_CONTENT=$(echo "$BAD_CODE" | base64 -w 0)
 
 curl -sf --request POST \
-    --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+    --header "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
     --header "Content-Type: application/json" \
     --data "{
         \"branch\": \"${BRANCH_NAME}\",
@@ -220,7 +238,7 @@ echo "  代码已提交。"
 echo "创建 Merge Request..."
 
 MR_RESPONSE=$(curl -sf --request POST \
-    --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+    --header "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
     --header "Content-Type: application/json" \
     --data "{
         \"source_branch\": \"${BRANCH_NAME}\",
@@ -249,7 +267,7 @@ interval=5
 
 while [ "$elapsed" -lt "$POLL_TIMEOUT" ]; do
     NOTES=$(curl -sf \
-        --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+        --header "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
         "${GITLAB_URL}/api/v4/projects/${PROJECT_ENCODED}/merge_requests/${MR_IID}/notes" 2>/dev/null || echo "[]")
 
     NOTE_COUNT=$(echo "$NOTES" | grep -c '"body"' || true)
