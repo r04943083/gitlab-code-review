@@ -37,7 +37,7 @@ POLL_TIMEOUT=120
 echo "=== 端到端测试 ==="
 
 # --- 检查 GitLab ---
-if ! curl -sf -o /dev/null "${GITLAB_URL}/-/health" 2>/dev/null; then
+if ! curl -sf -o /dev/null "${GITLAB_URL}/users/sign_in" 2>/dev/null; then
     echo "ERROR: GitLab 不可用。请先运行: bash scripts/01-install-gitlab.sh"
     exit 1
 fi

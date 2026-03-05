@@ -39,7 +39,7 @@ if ! docker ps --format '{{.Names}}' | grep -q '^gitlab$'; then
     exit 1
 fi
 
-if ! curl -sf -o /dev/null "${GITLAB_URL}/-/health" 2>/dev/null; then
+if ! curl -sf -o /dev/null "${GITLAB_URL}/users/sign_in" 2>/dev/null; then
     echo "GitLab 尚未就绪，等待中..."
     "$SCRIPT_DIR/wait-for-gitlab.sh" "$GITLAB_URL" 300
 fi

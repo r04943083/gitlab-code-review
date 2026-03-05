@@ -29,7 +29,7 @@ echo ""
 # --- GitLab ---
 printf "%-20s" "GitLab:"
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^gitlab$'; then
-    if curl -sf -o /dev/null "http://localhost:${GITLAB_PORT}/-/health" 2>/dev/null; then
+    if curl -sf -o /dev/null "http://localhost:${GITLAB_PORT}/users/sign_in" 2>/dev/null; then
         echo "✓ 运行中 (健康) - http://localhost:${GITLAB_PORT}"
     else
         echo "△ 运行中 (启动中/未就绪)"

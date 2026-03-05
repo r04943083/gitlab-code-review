@@ -46,7 +46,7 @@ GITLAB_URL="http://localhost:${GITLAB_PORT:-8080}"
 
 # --- 幂等检查：GitLab 是否已在运行且健康 ---
 if docker ps --format '{{.Names}}' | grep -q '^gitlab$'; then
-    if curl -sf -o /dev/null "${GITLAB_URL}/-/health" 2>/dev/null; then
+    if curl -sf -o /dev/null "${GITLAB_URL}/users/sign_in" 2>/dev/null; then
         echo ""
         echo "GitLab 已在运行且健康。"
         echo "  URL: ${GITLAB_URL}"
