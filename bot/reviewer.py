@@ -61,7 +61,8 @@ class ReviewOrchestrator:
                 for d in filtered
             ]
             user_prompt = build_user_prompt(
-                diff_dicts, mr_title, mr_description, self.config.MAX_DIFF_CHARS
+                diff_dicts, mr_title, mr_description, self.config.MAX_DIFF_CHARS,
+                language=self.config.REVIEW_LANGUAGE,
             )
 
             # 5. Build dynamic system prompt with file-type supplements
@@ -88,7 +89,7 @@ class ReviewOrchestrator:
                     posted += 1
 
             # 9. Post summary note
-            summary = self._build_summary(result, posted)
+            summary = self._build_summary(result, posted, self.config.REVIEW_LANGUAGE)
             await self.gitlab.post_mr_note(project_id, mr_iid, summary)
 
             logger.info(
@@ -131,16 +132,33 @@ class ReviewOrchestrator:
         return True
 
     @staticmethod
-    def _build_summary(result: ReviewResult, posted: int) -> str:
-        parts = ["## 🤖 Code Review Summary", "", result.summary, ""]
+    def _build_summary(result: ReviewResult, posted: int, language: str = "zh") -> str:
+        if language == "zh":
+            labels = {
+                "title": "## 🤖 代码审查总结",
+                "files": "**审查文件数：**",
+                "issues": "**发现问题数：**",
+                "severity": "**按严重程度：**",
+                "posted": "**已发布评论：**",
+            }
+        else:
+            labels = {
+                "title": "## 🤖 Code Review Summary",
+                "files": "**Files reviewed:**",
+                "issues": "**Issues found:**",
+                "severity": "**By severity:**",
+                "posted": "**Comments posted:**",
+            }
+
+        parts = [labels["title"], "", result.summary, ""]
         if result.stats:
             stats = result.stats
-            parts.append(f"**Files reviewed:** {stats.get('files_reviewed', 'N/A')}")
-            parts.append(f"**Issues found:** {stats.get('total_issues', 0)}")
+            parts.append(f"{labels['files']} {stats.get('files_reviewed', 'N/A')}")
+            parts.append(f"{labels['issues']} {stats.get('total_issues', 0)}")
             by_sev = stats.get("by_severity", {})
             if by_sev:
                 sev_parts = [f"{k}: {v}" for k, v in by_sev.items() if v]
                 if sev_parts:
-                    parts.append(f"**By severity:** {', '.join(sev_parts)}")
-        parts.append(f"**Comments posted:** {posted}")
+                    parts.append(f"{labels['severity']} {', '.join(sev_parts)}")
+        parts.append(f"{labels['posted']} {posted}")
         return "\n".join(parts)

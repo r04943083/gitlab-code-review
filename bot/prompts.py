@@ -1,228 +1,108 @@
-"""Prompt templates for code review."""
+"""Prompt templates for code review — loaded from external Markdown files."""
 
-SYSTEM_PROMPTS = {
-    "zh": """你是一位资深软件工程师，负责审查 Merge Request 的代码变更。
+import os
+from functools import lru_cache
+from pathlib import Path
 
-## 输入格式
-你会收到 unified diff 格式的代码变更。diff 中：
-- 以 `@@` 开头的行是 hunk header，格式为 `@@ -旧起始行,旧行数 +新起始行,新行数 @@`
-- 以 `+` 开头的行是新增行，行号从 hunk header 的 `+新起始行` 开始递增
-- 以 `-` 开头的行是删除行
-- 没有前缀的行是上下文行（未修改）
+import yaml
 
-## 输出格式
-按以下 JSON 格式返回审查结果：
-
-{
-  "summary": "用 2-3 句话概述本次 MR 的变更质量和关键问题",
-  "inline_comments": [
-    {
-      "file_path": "文件路径（与 diff header 中的路径一致）",
-      "line": <新文件中的行号，从 hunk header 的 +N 计算>,
-      "severity": "critical|high|medium|low|info",
-      "category": "bug|security|performance|style|maintainability|logic|error-handling",
-      "message": "问题描述：说明具体问题、为什么有问题、可能的后果",
-      "suggestion": "用来替换该行的修复代码（仅代码，不含解释）。如果修复需要多行改动或无法用单行替换表达，则设为 null",
-      "line_type": "new"
-    }
-  ],
-  "stats": {
-    "files_reviewed": <审查的文件数>,
-    "total_issues": <问题总数>,
-    "by_severity": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-  }
-}
-
-## 行号计算规则（重要！）
-1. 找到目标行所属的 hunk header `@@ -a,b +c,d @@`
-2. 从该 hunk 的 `+c` 开始计数
-3. 逐行往下：`+` 行和无前缀行（上下文行）都让新文件行号 +1，`-` 行不增加新文件行号
-4. line_type 对于新增行（+）始终设为 "new"
-
-## suggestion 字段规则
-- suggestion 是 GitLab suggestion 格式：内容将**直接替换**该行代码
-- 只包含替换后的代码，不要包含解释文字
-- 如果问题无法通过替换单行修复（如需要添加新代码段、重构等），设为 null，在 message 中说明修复方案
-- 示例：对于 `strcpy(buf, input);` 的建议可以是 `strncpy(buf, input, sizeof(buf) - 1); buf[sizeof(buf) - 1] = '\\0';`
-
-## 审查重点
-- 安全漏洞（注入、溢出、硬编码密钥等）
-- 逻辑错误和 bug
-- 资源泄漏（内存、文件句柄等）
-- 严重的性能问题
-- 不要评论代码风格、命名约定等琐碎问题
-- 同一个问题如果在多行出现，只在最典型的一行评论，不要重复
-- 每条评论必须有实质性价值，宁少勿多
-- 如果没有发现值得指出的问题，返回空的 inline_comments 数组
-
-只返回有效的 JSON，不要包含其他文字。""",
-
-    "en": """You are a senior software engineer reviewing a Merge Request.
-
-## Input format
-You will receive code changes in unified diff format:
-- Lines starting with `@@` are hunk headers: `@@ -old_start,old_count +new_start,new_count @@`
-- Lines starting with `+` are added lines, numbered from the `+new_start` in the hunk header
-- Lines starting with `-` are removed lines
-- Lines without a prefix are context lines (unchanged)
-
-## Output format
-Return review results as JSON:
-
-{
-  "summary": "2-3 sentence overview of the MR quality and key issues",
-  "inline_comments": [
-    {
-      "file_path": "path matching the diff header",
-      "line": <line number in new file, calculated from hunk header +N>,
-      "severity": "critical|high|medium|low|info",
-      "category": "bug|security|performance|style|maintainability|logic|error-handling",
-      "message": "Describe the specific issue, why it's problematic, and potential consequences",
-      "suggestion": "Replacement code for this line (code only, no explanation). Set to null if the fix requires multi-line changes or restructuring",
-      "line_type": "new"
-    }
-  ],
-  "stats": {
-    "files_reviewed": <int>,
-    "total_issues": <int>,
-    "by_severity": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-  }
-}
-
-## Line number calculation (important!)
-1. Find the hunk header `@@ -a,b +c,d @@` containing the target line
-2. Start counting from `+c`
-3. Count down: `+` lines and context lines (no prefix) increment the new file line number; `-` lines do not
-4. line_type should always be "new" for added lines
-
-## suggestion field rules
-- suggestion content will DIRECTLY REPLACE the line in GitLab's suggestion UI
-- Include only the replacement code, no explanations
-- If the fix requires multi-line changes or restructuring, set to null and explain the fix in message
-- Example: for `strcpy(buf, input);`, suggestion could be `strncpy(buf, input, sizeof(buf) - 1); buf[sizeof(buf) - 1] = '\\0';`
-
-## Review focus
-- Security vulnerabilities (injection, overflow, hardcoded secrets, etc.)
-- Logic errors and bugs
-- Resource leaks (memory, file handles, etc.)
-- Serious performance issues
-- Do NOT comment on code style, naming conventions, or trivial formatting
-- If the same issue appears on multiple lines, comment only on the most representative one
-- Every comment must provide substantial value—quality over quantity
-- If no issues are found, return an empty inline_comments array
-
-Return ONLY valid JSON, no other text."""
-}
+PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
-CPP_REVIEW_SUPPLEMENTS = {
-    "zh": """
-## C/C++ 专项审查要点
+def _parse_md_file(path: Path) -> tuple[dict, str]:
+    """Parse a Markdown file with optional YAML front matter.
 
-### 内存安全
-- RAII 违规：手动 new/delete 未封装在 RAII 类或智能指针中
-- Rule of Three/Five：定义了析构函数但缺少拷贝构造/赋值运算符（反之亦然）
-- Use-after-free：释放后继续使用指针
-- Double-free：同一指针多次释放
-- 悬空引用/指针：返回局部变量的引用或指针
+    Returns (front_matter_dict, body_text).
+    """
+    text = path.read_text(encoding="utf-8")
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) >= 3:
+            front_matter = yaml.safe_load(parts[1]) or {}
+            body = parts[2].strip()
+            return front_matter, body
+    return {}, text.strip()
 
-### 现代 C++ 实践
-- 优先使用 `std::unique_ptr`/`std::shared_ptr` 替代 raw pointer
-- 优先使用 `std::string` 替代 `char*`
-- 使用 `enum class` 替代 plain enum
-- 适当使用 `constexpr`、`auto`、range-based for
 
-### 并发安全
-- 数据竞争：多线程访问共享变量未加锁
-- 死锁：不一致的加锁顺序
-- 缺少 `std::lock_guard`/`std::unique_lock` 的 RAII 锁管理
+def _render_template(template: str, variables: dict) -> str:
+    """Replace {{variable}} placeholders in a template string."""
+    result = template
+    for key, value in variables.items():
+        result = result.replace("{{" + key + "}}", value if value is not None else "")
+    return result
 
-### C++ 反模式
-- 头文件中 `using namespace std`（污染全局命名空间）
-- 缺少 include guard 或 `#pragma once`
-- C-style cast（应使用 `static_cast`/`dynamic_cast`/`reinterpret_cast`）
-- 析构函数抛出异常
-- 对象切片（通过值传递多态对象）
-- 基类缺少虚析构函数
 
-### 不安全 C 遗留函数（在 C++ 中应避免）
-- `strcpy`/`strcat` → 使用 `std::string` 或 `strncpy`
-- `sprintf` → 使用 `snprintf` 或 `std::format`
-- `gets` → 已废弃，使用 `std::getline`
-- `system()` → 避免命令注入，使用安全的替代方案
-- `malloc`/`free` → 在 C++ 中使用 `new`/`delete` 或智能指针
-""",
+def _build_supplement_registry() -> dict[str, dict[str, Path]]:
+    """Scan supplements/ directory and build {ext: {lang: path}} mapping."""
+    registry: dict[str, dict[str, Path]] = {}
+    supplements_dir = PROMPTS_DIR / "supplements"
+    if not supplements_dir.exists():
+        return registry
 
-    "en": """
-## C/C++ Specific Review Guidelines
+    for md_file in supplements_dir.glob("*.md"):
+        front_matter, _ = _parse_md_file(md_file)
+        extensions = front_matter.get("extensions", [])
+        lang = front_matter.get("language", "")
+        if not extensions or not lang:
+            continue
+        for ext in extensions:
+            if ext not in registry:
+                registry[ext] = {}
+            registry[ext][lang] = md_file
 
-### Memory Safety
-- RAII violations: raw new/delete not wrapped in RAII classes or smart pointers
-- Rule of Three/Five: destructor defined but missing copy constructor/assignment operator (or vice versa)
-- Use-after-free: accessing memory after deallocation
-- Double-free: freeing the same pointer twice
-- Dangling references/pointers: returning references or pointers to local variables
+    return registry
 
-### Modern C++ Practices
-- Prefer `std::unique_ptr`/`std::shared_ptr` over raw pointers
-- Prefer `std::string` over `char*`
-- Use `enum class` instead of plain enum
-- Use `constexpr`, `auto`, range-based for where appropriate
 
-### Concurrency Safety
-- Data races: shared variable access without synchronization
-- Deadlocks: inconsistent lock ordering
-- Missing RAII lock management (`std::lock_guard`/`std::unique_lock`)
+# Build registry at module load time
+_supplement_registry = _build_supplement_registry()
 
-### C++ Anti-patterns
-- `using namespace std` in header files (namespace pollution)
-- Missing include guards or `#pragma once`
-- C-style casts (use `static_cast`/`dynamic_cast`/`reinterpret_cast`)
-- Throwing exceptions in destructors
-- Object slicing (passing polymorphic objects by value)
-- Missing virtual destructor in base classes
 
-### Unsafe C Legacy Functions (avoid in C++)
-- `strcpy`/`strcat` → use `std::string` or `strncpy`
-- `sprintf` → use `snprintf` or `std::format`
-- `gets` → deprecated, use `std::getline`
-- `system()` → avoid command injection, use safe alternatives
-- `malloc`/`free` → use `new`/`delete` or smart pointers in C++
-"""
-}
-
-# File extensions that trigger C/C++ supplement
-CPP_EXTENSIONS = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"}
+@lru_cache(maxsize=32)
+def _load_md_body(path_str: str) -> str:
+    """Load and cache the body of a markdown file (excludes front matter)."""
+    _, body = _parse_md_file(Path(path_str))
+    return body
 
 
 def get_system_prompt(language: str) -> str:
     """Get system prompt for the specified language."""
-    return SYSTEM_PROMPTS.get(language, SYSTEM_PROMPTS["zh"])
+    lang = language if language in ("zh", "en") else "zh"
+    path = PROMPTS_DIR / "system" / f"{lang}.md"
+    return _load_md_body(str(path))
 
 
 def get_file_type_supplement(file_extensions: set[str], language: str) -> str:
     """Return language-specific review supplement based on file extensions.
 
-    Returns C/C++ supplement if any C/C++ file extensions are detected.
+    Supports multiple supplements if different file types are present.
     """
-    if file_extensions & CPP_EXTENSIONS:
-        return CPP_REVIEW_SUPPLEMENTS.get(language, CPP_REVIEW_SUPPLEMENTS["zh"])
-    return ""
+    lang = language if language in ("zh", "en") else "zh"
+    seen_paths: set[str] = set()
+    supplements: list[str] = []
+
+    for ext in file_extensions:
+        lang_map = _supplement_registry.get(ext)
+        if not lang_map:
+            continue
+        path = lang_map.get(lang) or lang_map.get("zh")
+        if path and str(path) not in seen_paths:
+            seen_paths.add(str(path))
+            supplements.append(_load_md_body(str(path)))
+
+    return "\n\n".join(supplements)
 
 
 def build_user_prompt(
-    diffs: list[dict], mr_title: str, mr_description: str | None, max_chars: int
+    diffs: list[dict],
+    mr_title: str,
+    mr_description: str | None,
+    max_chars: int,
+    language: str = "zh",
 ) -> str:
     """Build the user prompt with diff content, truncating if needed."""
-    parts = [
-        f"## Merge Request: {mr_title}",
-    ]
-    if mr_description:
-        parts.append(f"\n### Description:\n{mr_description}")
-
-    parts.append("\n### Diffs:\n")
-
-    total_chars = sum(len(p) for p in parts)
+    # Build diff text
+    diff_parts: list[str] = []
+    total_chars = 0
 
     for diff_info in diffs:
         header = f"\n--- {diff_info['old_path']} -> {diff_info['new_path']} ---\n"
@@ -232,11 +112,22 @@ def build_user_prompt(
         if total_chars + len(section) > max_chars:
             remaining = max_chars - total_chars
             if remaining > 100:
-                parts.append(section[:remaining])
-                parts.append("\n\n[TRUNCATED: diff too large]")
+                diff_parts.append(section[:remaining])
+                diff_parts.append("\n\n[TRUNCATED: diff too large]")
             break
 
-        parts.append(section)
+        diff_parts.append(section)
         total_chars += len(section)
 
-    return "".join(parts)
+    diffs_text = "".join(diff_parts)
+
+    # Load and render user template
+    lang = language if language in ("zh", "en") else "zh"
+    path = PROMPTS_DIR / "user" / f"{lang}.md"
+    template = _load_md_body(str(path))
+
+    return _render_template(template, {
+        "mr_title": mr_title,
+        "mr_description": mr_description or "",
+        "diffs": diffs_text,
+    })

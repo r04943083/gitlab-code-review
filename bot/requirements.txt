@@ -6,3 +6,4 @@ pydantic-settings
 anthropic
 openai
 python-json-logger
+pyyaml
